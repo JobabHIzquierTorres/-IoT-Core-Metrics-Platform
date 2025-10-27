@@ -1,0 +1,78 @@
+services:
+  redis-db:
+    networks:
+      - IoTCore
+    image: redis:latest
+    ports:
+      - "6555:6379"
+    volumes:
+      - redis_data:/data
+  timescaledb:
+    networks:
+      - IoTCore
+    image: timescale/timescaledb:latest-pg16
+    env_file:
+      - .env.db
+    ports:
+      - "5555:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+  django-base: &django-base
+    networks:
+      - IoTCore
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env.db-container
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./src
+          target: /code
+        - action: sync+restart
+          path: ./requirements.txt
+          target: /tmp/requirements.txt
+  web:
+    <<: *django-base
+    environment:
+      - NODE_ID=0
+      - PORT=8088
+    ports:
+      - "8088:8088"
+  beat:
+    <<: *django-base
+    environment:
+      - NODE_ID=0
+    command: |
+      celery -A IoT_Core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+  node_1:
+    <<: *django-base
+    environment:
+      - NODE_ID=1
+    command: |
+      celery -A IoT_Core worker --pool=solo --loglevel=info -Q node-1
+  node_2:
+    <<: *django-base
+    environment:
+      - NODE_ID=2
+    command: |
+      celery -A IoT_Core worker --pool=solo --loglevel=info -Q node-2
+  node_3:
+    <<: *django-base
+    environment:
+      - NODE_ID=3
+    command: |
+      celery -A IoT_Core worker --pool=solo --loglevel=info -Q node-3
+  node_4:
+    <<: *django-base
+    environment:
+      - NODE_ID=4
+    command: |
+      celery -A IoT_Core worker --pool=solo --loglevel=info -Q node-4
+volumes:
+  redis_data:
+
+networks:
+  IoTCore:

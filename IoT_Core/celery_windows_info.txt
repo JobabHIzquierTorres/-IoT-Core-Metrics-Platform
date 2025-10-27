@@ -1,0 +1,30 @@
+Error en Windows: PermissionError: [WinError 5] Acceso denegado
+
+Proviene de la librería billiard, que es usada internamente por Celery para manejar procesos en paralelo. El problema ocurre cuando Celery intenta acceder a una variable compartida entre procesos (self.on_ready_counter.value) y Windows le deniega el permiso.
+
+Celery usa multiprocessing para crear workers. En sistemas Unix (Linux/macOS), esto funciona bien porque los procesos pueden compartir memoria fácilmente. Pero en Windows, el modelo de procesos es diferente y más restrictivo, lo que puede causar errores como este cuando se usan objetos compartidos (como Value, Queue, etc.).
+
+Dos soluciones:
+
+1º Usar el backend solo en desarrollo:
+
+# en el archivo de conf de Celery
+CELERYD_POOL = "solo"
+
+2º Lanzar el worker:
+
+celery -A IoT_Core worker --pool=solo --loglevel=info
+
+# otro worker en una Queue
+celery -A IoT_Core worker --pool=solo --loglevel=info -Q node-2
+# node-2 es el nombre del worker
+
+# para beat (migrar antes django_celery_beat)
+celery -A IoT_Core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+
+# comprobar el worker activo 
+en la shell
+from IoT_Core.celery import app 
+>>> i= app.control.inspect()
+>>> print(i.active_queues()) 
